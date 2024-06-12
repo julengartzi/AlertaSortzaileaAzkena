@@ -1,0 +1,231 @@
+package alertaSortzailea;
+
+import javax.swing.*;
+import java.awt.*;
+import java.sql.*;
+import java.util.*;
+import java.text.SimpleDateFormat;
+import java.util.List;
+import java.util.ArrayList;
+
+
+public class MezuakProgramatu {
+    private JFrame frame;
+    private JTextArea textArea;
+
+    /**
+     * MezuakProgramatu klasearen eraikitzailea. Sortzen du JFrame bat eta JTextArea bat
+     * mezuen informazioa erakusteko.
+     */
+    public MezuakProgramatu() {
+        frame = new JFrame("Hurrengo Alertak");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(400, 300);
+        frame.setLayout(new BorderLayout());
+
+        textArea = new JTextArea();
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        frame.add(scrollPane, BorderLayout.CENTER);
+
+        frame.setVisible(true);
+    }
+
+    /**
+     * JTextArea mezua gehitzeko metodoa.
+     * 
+     * @param Gehitu nahi den mezua.
+     */
+    private void appendText(String text) {
+        textArea.append(text + "\n");
+        textArea.setCaretPosition(textArea.getDocument().getLength());
+    }
+    
+    /**
+     * JTextArea-ko testua garbitzeko metodoa.
+     */
+    private void textuaGarbitu() {
+        textArea.setText("");
+    }
+
+    /**
+     * JTextArea mezua erakusteko metodoa.
+     * 
+     * @param Erakusten den mezua.
+     */
+    public void mezuaErakutsi(String mensaje) {
+        SwingUtilities.invokeLater(() -> appendText(mensaje));
+    }
+
+    /**
+     * MezuakProgramatu klaseko main metodoa. Programa hasieratzen du.
+     * 
+     * @param args
+     */
+    public static void main(String[] args) {
+        MezuakProgramatu programa = new MezuakProgramatu();
+        while (true) {
+            Calendar calendario = Calendar.getInstance();
+            java.sql.Date fechaActual = new java.sql.Date(calendario.getTimeInMillis());
+            java.sql.Time horaActual = new java.sql.Time(calendario.getTimeInMillis());
+
+            SimpleDateFormat formatoFecha = new SimpleDateFormat("dd/MM/yyyy");
+            SimpleDateFormat formatoHora = new SimpleDateFormat("HH:mm");
+
+            String fechaFormateada = formatoFecha.format(fechaActual);
+            String horaFormateada = formatoHora.format(horaActual);
+            
+            // Garbitu testu-eremua informazio berria erakutsi aurretik
+            programa.textuaGarbitu();
+
+            programa.mezuaErakutsi("Gaurko data: " + fechaFormateada);
+            programa.mezuaErakutsi("Momentuko ordua: " + horaFormateada);
+
+            // Datak gordetzeko zerrendak
+            List<dataOrdua> iraganekoDatak = new ArrayList<>();
+            List<dataOrdua> gaurkoIraganekoDatak = new ArrayList<>();
+            List<dataOrdua> gaurkoEtorkizunekoDatak = new ArrayList<>();
+            List<dataOrdua> etorkizunekoDatak = new ArrayList<>();
+
+            try {
+                Connection conexion = Konexioa.getConnection();
+
+                // SQL kontsulta "mezua" taularen data eta ordua lortzeko
+                String kontsulta = "SELECT id, gaia, deskribapena, jasotzailea, data, ordua, errepikakorra, maiztasuna FROM mezua";
+                Statement sententzia = conexion.createStatement();
+                ResultSet emaitza = sententzia.executeQuery(kontsulta);
+
+                // Emaitzei buruzko iterazioa egin eta datak sailkatu
+                while (emaitza.next()) {
+                	int idDB = emaitza.getInt("id");
+                    String gaiaDB = emaitza.getString("gaia");
+                    String deskribapenaDB = emaitza.getString("deskribapena");
+                    String jasotzaileaDB = emaitza.getString("jasotzailea");
+                    String dataDB = emaitza.getString("data");
+                    String orduaDB = emaitza.getString("ordua");
+                    int errepikakorraDB = emaitza.getInt("errepikakorra");
+                    String maiztasunaDB = emaitza.getString("maiztasuna");
+
+                    // Datu-basearen data eta ordua bereizi
+                    SimpleDateFormat formatoDB = new SimpleDateFormat("dd/MM/yyyy HH:mm");
+                    java.util.Date fechaHoraUtil = formatoDB.parse(dataDB + " " + orduaDB);
+                    java.sql.Timestamp fechaHoraDB = new java.sql.Timestamp(fechaHoraUtil.getTime());
+
+                    // Datak eta orduak konparatu
+                    if (fechaFormateada.equals(dataDB)) {
+                        if (horaFormateada.compareTo(orduaDB) > 0) {
+                        	gaurkoIraganekoDatak.add(new dataOrdua(idDB, gaiaDB, deskribapenaDB, jasotzaileaDB, dataDB, orduaDB, errepikakorraDB, maiztasunaDB));
+                        } else if (horaFormateada.compareTo(orduaDB) <= 0) {
+                        	gaurkoEtorkizunekoDatak.add(new dataOrdua(idDB, gaiaDB, deskribapenaDB, jasotzaileaDB, dataDB, orduaDB, errepikakorraDB, maiztasunaDB));
+                        }
+                    } else if (fechaActual.compareTo(fechaHoraDB) > 0) {
+                    	iraganekoDatak.add(new dataOrdua(idDB, gaiaDB, deskribapenaDB, jasotzaileaDB, dataDB, orduaDB, errepikakorraDB, maiztasunaDB));
+                    } else {
+                    	etorkizunekoDatak.add(new dataOrdua(idDB, gaiaDB, deskribapenaDB, jasotzaileaDB, dataDB, orduaDB, errepikakorraDB, maiztasunaDB));
+                    }
+                }
+                
+                programa.mezuaErakutsi("\nGaurko hurrengo datak:");
+                for (dataOrdua dataOrdua : gaurkoEtorkizunekoDatak) {
+                    programa.mezuaErakutsi(dataOrdua.toString());
+                }
+                
+                programa.mezuaErakutsi("\nHurrengo egunetako datak:");
+                for (dataOrdua dataOrdua : etorkizunekoDatak) {
+                    programa.mezuaErakutsi(dataOrdua.toString());
+                }
+
+                // Data eta orduak konparatu gaurko hurrengo datekin
+                boolean berdinakDira = false;
+                for (dataOrdua dataOrdua : gaurkoEtorkizunekoDatak) {
+                    if (dataOrdua.getData().equals(fechaFormateada) && dataOrdua.getOrdua().equals(horaFormateada)) {
+                    	berdinakDira = true;
+                        break;
+                    }
+                }
+
+                if (berdinakDira) {
+                    programa.mezuaErakutsi("");
+                    programa.mezuaErakutsi("Mezua: data eta orduan koinzidentziak daude.");
+
+                    // Obtener los datos del registro coincidente
+                    int id = 0;
+                    String gaia = null;
+                    String deskribapena = null;
+                    String jasotzailea = null;
+                    int errepikakorra = 0;
+                    String maiztasuna = null;
+                    for (dataOrdua dataOrdua : gaurkoEtorkizunekoDatak) {
+                        if (dataOrdua.getData().equals(fechaFormateada) && dataOrdua.getOrdua().equals(horaFormateada)) {
+                        	id = dataOrdua.getID();
+                            gaia = dataOrdua.getGaia();
+                            deskribapena = dataOrdua.getDeskribapena();
+                            jasotzailea = dataOrdua.getJasotzailea();
+                            errepikakorra = dataOrdua.getErrepikakorra();
+                            maiztasuna = dataOrdua.getMaiztasuna();
+                            break; 
+                        }
+                    }
+
+                    if (gaia != null && deskribapena != null && jasotzailea != null) {
+                        String[] destinatarios = jasotzailea.split(";");
+                        for (String destinatario : destinatarios) {
+                            emailbidaltzailea.bidali(gaia, deskribapena, destinatario.trim());
+                            if (errepikakorra == 1) {
+                                // Crear una instancia de SimpleDateFormat con el formato deseado
+                                SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy");
+                                
+                                // Obtener la fecha actual utilizando Calendar.getInstance()
+                                Calendar calendar = Calendar.getInstance();
+                                
+                                // Formatear la fecha actual
+                                String formattedDate = dateFormat.format(calendar.getTime());
+
+                                java.sql.Date dataBerria = null;
+
+                                switch (maiztasuna) {
+                                    case "EGUNERO":
+                                        calendar.add(Calendar.DAY_OF_YEAR, 1);
+                                        dataBerria = new java.sql.Date(calendar.getTimeInMillis());
+                                        break;
+                                    case "ASTERO":
+                                        calendar.add(Calendar.WEEK_OF_YEAR, 1);
+                                        dataBerria = new java.sql.Date(calendar.getTimeInMillis());
+                                        break;
+                                    case "HILABETERO":
+                                        calendar.add(Calendar.MONTH, 1);
+                                        dataBerria = new java.sql.Date(calendar.getTimeInMillis());
+                                        break;
+                                    case "URTERO":
+                                        calendar.add(Calendar.YEAR, 1);
+                                        dataBerria = new java.sql.Date(calendar.getTimeInMillis());
+                                        break;
+                                    default:
+                                        System.out.println("Valor de maiztasuna no reconocido");
+                                        break;
+                                }
+                                
+                                
+                            }
+                        }
+                    } else {
+                        programa.mezuaErakutsi("Ez dira datuak aurkitu mezua bidaltzeko.");
+                    }
+                }
+
+                emaitza.close();
+                sententzia.close();
+                conexion.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            } catch (java.text.ParseException e) {
+                e.printStackTrace();
+            }
+
+            try {
+                Thread.sleep(60000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
